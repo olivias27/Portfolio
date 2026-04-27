@@ -1,0 +1,637 @@
+---
+title: "STAT 1341 FINAL PROJECT"
+author: "Olivia Snyder"
+date: "2025-12-04"
+output: html_document
+---
+
+# Loading and Cleaning
+
+```{r}
+library(rvest)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+stats <- read.csv("stats.csv")
+stats <- stats %>% 
+  mutate(
+    Team = str_remove(Team, "\\*"),
+    Team = str_replace_all(Team, " ", "_"),
+    Team = str_trim(Team)
+  ) %>% 
+  filter(Team != "League_Average")
+nhl_url <- "https://www.hockey-reference.com/leagues/NHL_2003.html"
+nhl_page <- read_html(nhl_url)
+nhl_tables <- nhl_page %>% 
+  html_table()
+```
+
+# Filtering + Combining
+
+```{r}
+nhl_stats <- bind_rows(nhl_tables[1], nhl_tables[2])
+nhl_stats <- nhl_stats %>% 
+  rename(Team = "...1",
+         PTS. = "PTS%") %>% 
+  select(-"RPt%") %>% 
+  mutate(
+    Team = str_remove(Team, "\\*"),
+    Team = str_replace_all(Team, " ", "_"),
+    Team = str_trim(Team)
+  ) %>% 
+  filter(!str_detect(Team, "Division"))
+
+nhl <- nhl_stats %>% 
+  left_join(stats, by = "Team", suffix = c("", ".nhl_dup")) %>% 
+  select(-ends_with(".nhl_dup"))
+nhl$Team <- gsub("Atlanta_Thrashers", "Winnipeg_Jets", nhl$Team)
+nhl
+```
+
+# Adding New Statistics to Dataset
+
+```{r}
+nhl <- nhl %>%
+  mutate(
+    GF = as.numeric(GF),
+    GA = as.numeric(GA),
+    PTS. = as.numeric(PTS.),
+    GP = as.numeric(GP),
+    SRS =as.numeric(SRS)) %>% 
+  mutate(
+    PDO = ((S./100) + SV.)*100,
+    STR = PP. + PK.,
+    pythagorean_pct = (GF^2.15) / (GF^2.15 + GA^2.15),
+    residual = PTS. - pythagorean_pct,
+    goal_diff = GF - GA,
+    MOV = goal_diff / GP
+  )
+```
+
+# PDO
+
+```{r}
+nhl %>% 
+  ggplot(aes(x=reorder(Team, PDO), y = PDO)) +
+  geom_col(aes(fill = factor(PDO > 100)), show.legend = TRUE) + 
+  coord_flip(ylim = c(95,105)) + labs(
+    title = "Team PDO Scores",
+    x = "Team",
+    y = "PDO Score",
+    fill = "PDO > 100 ?"
+  )
+```
+
+# Special Teams Rating (STR)
+
+```{r}
+nhl %>% 
+  arrange(STR) %>% 
+  ggplot(aes(x= reorder(Team, STR), y = STR))+
+  geom_col(aes(fill = factor(STR > 100)), show.legend = FALSE) + 
+  coord_flip(ylim = c(95,110)) + labs( 
+    title = "Special Teams Rating (PP% + PK%)",
+    x = "Team",
+    y = "STR")
+```
+
+# Simple Rating System (SRS)
+
+```{r}
+nhl %>% 
+  ggplot(aes(x = SRS))+
+  geom_histogram(binwidth = 0.1, fill = "purple", color = "black", alpha = 0.7) + 
+  labs(
+    title = "Distribution of Simp[e Rating System Scores",
+    x = "SRS Scores",
+    y = "Number of Teams"
+  )
+```
+
+# Scoring Distributions 
+
+```{r}
+nhl %>% 
+  ggplot(aes(x = GF, y = GA, label = Team)) + 
+  geom_point(aes(color = goal_diff),alpha = 0.6, size = 2) +
+  geom_text(nudge_y = 2.5)+
+  labs(
+    title = "Goals For vs. Goals Against",
+    x = "Goals For",
+    y= "Goals Against"
+  )
+nhl %>% 
+  ggplot(aes(x = MOV)) +
+  geom_histogram(binwidth = 0.1, fill = "orange", color = "black", alpha = 0.6) +
+  labs(
+    title = "Distribution of Average Margin of Victory",
+    x = "Average Score Differential per Game",
+    y = "Number of Teams"
+  )
+```
+
+# Pythagorean Win Percentages + Residuals
+
+```{r}
+nhl %>% 
+  ggplot(aes(x = reorder(Team, pythagorean_pct), y = pythagorean_pct)) +
+  geom_col(fill = "pink3")+
+  geom_hline(yintercept = 0.500) +
+  coord_flip(ylim = c(0.35,0.7)) + 
+  labs(title = "Pythagorean Win % by Team",
+       x = "Team",
+       y = "Pythagorean Win Percentage") 
+nhl %>%
+  ggplot(aes(x = as.numeric(pythagorean_pct), y = as.numeric(PTS.), label = Team)) +
+  geom_point(aes(color = residual),alpha = 0.6, size = 3) +
+  scale_color_gradient(
+    low = "blue",
+    high = "red",
+    name = "Residuals"
+  ) +
+  geom_abline(slope = 1, intercept = 0)+
+  coord_flip() +
+  labs(
+    title = "Pythagorean Win % vs. Actual Win %",
+    x = "Pythagorean Win %",
+    y= "Actual Win %"
+  )
+  
+```
+
+# Summary Statistics
+
+```{r}
+summary_stats <- nhl %>% 
+  summarise(
+    PDO_mean = mean(PDO),
+    PDO_SD = sd(PDO),
+    PDO_min = min(PDO),
+    PDO_max = max(PDO),
+    STR_mean = mean(STR),
+    STR_SD = sd(STR),
+    STR_min = min(STR),
+    STR_max = max(STR),
+    SRS_mean = mean(SRS),
+    SRS_SD = sd(SRS),
+    SRS_min = min(SRS),
+    SRS_max = max(SRS),
+    MOV_mean = mean(MOV),
+    MOV_SD = sd(MOV),
+    MOV_min = min(MOV),
+    MOV_max = max(MOV),
+    Pythagorean_mean = mean(pythagorean_pct),
+    Pythagorean_SD = sd(pythagorean_pct),
+    Pyth_min = min(pythagorean_pct),
+    Pyth_max = max(pythagorean_pct),
+    Residual_mean = mean(residual),
+    Residual_SD = sd(residual),
+    Residual_min = min(residual),
+    Residual_max = max(residual)
+  )
+head(nhl %>% arrange(desc(SRS)), 1)
+head(nhl %>% arrange(SRS), 1) 
+head(nhl %>% arrange(desc(pythagorean_pct)), 1)
+head(nhl %>% arrange(pythagorean_pct), 1)
+head(nhl %>% arrange(desc(residual)), 1)
+head(nhl %>% arrange(residual), 1)
+summary_stats
+
+pyth_corr <- cor(nhl$pythagorean_pct, nhl$PTS.)
+pyth_corr
+
+score_diff_cor <- cor(nhl$GF, nhl$GA)
+score_diff_cor
+```
+
+# Poisson Modeling
+
+```{r}
+scores <- read.csv("nhl_data.csv")
+scores <- scores %>% 
+  filter(season == 2002, game_type == "r") %>% 
+  select(home_team, away_team, home_score, away_score, tie, location)
+
+scores$home_team = gsub(" ", "_", scores$home_team)
+scores$away_team = gsub(" ", "_", scores$away_team)
+
+for (i in 1:nrow(scores)){
+  if(scores$tie[i]==1){
+    if(scores$home_score[i] > scores$away_score[i]){
+      scores$home_score[i] = scores$home_score[i] - 1}
+    else if (scores$home_score[i] < scores$away_score[i]){
+      scores$away_score[i] = scores$away_score[i] - 1}
+  }
+}
+
+teams = sort(unique(scores$home_team))
+off_teams = teams
+def_teams = off_teams
+
+data_matrix = as.data.frame(matrix(nrow = 2*nrow(scores), ncol = 2+2*length(teams)))
+
+for (i in 1:length(off_teams)){
+  off_teams[i] = paste(off_teams[i], "Off.")
+}
+for (i in 1:length(off_teams)){
+  def_teams[i] = paste(def_teams[i], "Def.")
+}
+
+colnames(data_matrix) = c("Score", "Location", off_teams, def_teams)
+data_matrix[is.na(data_matrix)] = 0
+
+for (i in 1:nrow(scores)){
+  for (j in 1:length(teams)) {
+    if (scores$home_team[i] == teams[j]){
+      data_matrix[i,j+2] = 1
+      data_matrix[i+nrow(scores), j+2+length(teams)] = -1
+    break
+    }
+  }
+
+for (j in 1:length(teams)) {
+  if(scores$away_team[i] == teams[j]){
+    data_matrix[i+nrow(scores), j+2] = 1
+    data_matrix[i, j+2+length(teams)] = -1
+    break
+    }
+  }
+}
+data_matrix$Score = c(scores$home_score, scores$away_score)
+data_matrix$Location = c(scores$location, 0*scores$location)
+
+model = glm(Score~., data= data_matrix, family = "poisson")
+coefficients = coef(model, complete = TRUE)
+summary(model)
+```
+
+# Expected Goals and Probabilities
+
+```{r}
+max_goals = 8
+ht = "New_Jersey_Devils"
+at = "Anaheim_Ducks"
+
+exp_score = matrix(nrow = max_goals+1, ncol = max_goals+1, byrow = TRUE)
+
+for( i in 1:length(teams)){
+  if(teams[i]==ht){
+    ht_index = i
+  }
+  if(teams[i] == at){
+    at_index = i
+  }
+}
+
+home_score = exp(coefficients[1] + coefficients[2] + coefficients[2 + ht_index] - coefficients[2+length(teams) + at_index])
+away_score = exp(coefficients[1] + coefficients[2 + at_index]- coefficients[2 + length(teams) + ht_index])
+
+home_win_prob = 0
+draw_prob = 0
+away_win_prob = 0
+
+for( i in 0:max_goals){
+  for (j in 0:max_goals) {
+    outcome_prob = ((home_score^i)*(exp(-home_score))/factorial(i)) * ((away_score^j)* (exp(-away_score))/factorial(j))
+    exp_score[i+1, j+1] = outcome_prob
+    if(i == j){
+      draw_prob = draw_prob + outcome_prob
+    }
+    else if (i < j){
+      away_win_prob = away_win_prob + outcome_prob
+    }
+    else{
+      home_win_prob = home_win_prob + outcome_prob
+    }
+  }
+}
+scoreline_dist = round(exp_score*100, 2)
+colnames(scoreline_dist) = c(0:max_goals)
+rownames(scoreline_dist) = c(0:max_goals)
+
+print(paste("Expected Home Goals (Devils):", round(home_score, 3)))
+print(paste("Expected Away Goals (Ducks):", round(away_score, 3)))
+print("Scoreline Probability Distribution (in %):")
+print(scoreline_dist)
+print(paste("Home Win Probability:", round(home_win_prob * 100, 2), "%"))
+print(paste("Draw Probability:", round(draw_prob * 100, 2), "%"))
+print(paste("Away Win Probability:", round(away_win_prob * 100, 2), "%"))
+```
+
+# Elo Ratings 
+## HFA
+
+```{r}
+team_info <- read.csv("nhl_initial_elos.csv")
+scores <- read.csv("nhl_data.csv")
+
+scores$home_team <- gsub(" ", "_", scores$home_team)
+scores$away_team <- gsub(" ", "_", scores$away_team)
+team_info$team <- gsub(" ", "_", team_info$team)
+
+non_ties = subset(scores, season == 2002 & game_type == "r" & location == 1 & home_score != away_score)
+
+home_wins = sum(non_ties$home_score > non_ties$away_score)
+games = nrow(non_ties)
+
+home_win_prob = home_wins / games
+hfa = -400 * log10(1 / home_win_prob - 1)
+print(hfa)
+```
+
+## Optimal K
+
+```{r}
+
+starting_weight = 5
+iterations = 100
+step_size = 0.1
+first_season = 2002
+
+first_game_index = which(scores$season == first_season & scores$game_type == "r")[1]
+last_game_index = which(scores$season == first_season & scores$game_type == "r") 
+last_game_index = last_game_index[length(last_game_index)]
+
+weights = starting_weight + (1:iterations) * step_size
+errors = numeric(iterations)
+
+for (counter in 1:iterations) {
+    weight = weights[counter]
+    current_team_info = team_info
+    error = 0
+    for (i in first_game_index:last_game_index){
+       game = scores[i, ]
+        home_team = game$home_team
+        away_team = game$away_team
+        home_score = game$home_score
+        away_score = game$away_score
+        location = game$location
+        
+        home_index = match(home_team, current_team_info$team)
+        away_index = match(away_team, current_team_info$team)
+        home_elo = current_team_info$rating[home_index]
+        away_elo = current_team_info$rating[away_index]
+        
+        win_prob = 1 / (10^((away_elo - (home_elo + hfa * location)) / 400) + 1)
+
+        if(home_score > away_score) { 
+            home_result = 1  
+        } else if(home_score < away_score) { 
+            home_result = 0  
+        } else { 
+            home_result = 0.5  
+        }
+        error = error + (home_result - win_prob)^2
+        score_diff = max(abs(game$home_score - game$away_score), 0.50)
+        home_elo_adjustment = weight * sqrt(score_diff) * (home_result - win_prob)
+        current_team_info$rating[home_index] = home_elo + home_elo_adjustment
+        current_team_info$rating[away_index] = away_elo - home_elo_adjustment
+    }
+
+    errors[counter] = error
+    print(error)
+}
+optimal_weight = weights[which.min(errors)]
+cat("Optimal weight:", optimal_weight, "\n")
+
+plot(weights, errors, pch = 19, xlab = "Weight", ylab = "Error")
+```
+
+## Elo Calculation
+
+```{r} 
+final_k = optimal_weight
+team_to_track = "Anaheim_Ducks"
+team_results = data.frame()
+initial_elos_df <- team_info %>% 
+    select(team, Preseason_Elo = rating)
+
+final_elos_df = team_info
+for (i in first_game_index:last_game_index) {
+    game = scores[i, ]
+    home_team = game$home_team
+    away_team = game$away_team
+    home_score = game$home_score
+    away_score = game$away_score
+    location = game$location
+    
+    home_index = match(home_team, final_elos_df$team)
+    away_index = match(away_team, final_elos_df$team)
+    home_elo = final_elos_df$rating[home_index]
+    away_elo = final_elos_df$rating[away_index]
+    
+    win_prob = 1 / (10^((away_elo - (home_elo + hfa * location)) / 400) + 1)
+
+    if (home_score > away_score) {
+        home_result = 1
+    } else if (home_score < away_score) {
+        home_result = 0
+    } else {
+        home_result = 0.5
+    }
+
+    score_diff = max(abs(game$home_score - game$away_score), 0.50)
+    home_elo_adjustment = final_k * sqrt(score_diff) * (home_result - win_prob)
+    
+    final_elos_df$rating[home_index] = home_elo + home_elo_adjustment
+    final_elos_df$rating[away_index] = away_elo - home_elo_adjustment
+    if(home_team == team_to_track || away_team == team_to_track)
+    {
+      team_is_home = (home_team == team_to_track)
+      
+      opponent = ifelse(team_is_home, away_team, home_team)
+        pregame_elo = ifelse(team_is_home, home_elo, away_elo)
+        opponent_elo = ifelse(team_is_home, away_elo, home_elo)
+        team_score = ifelse(team_is_home, game$home_score, game$away_score)
+        opp_score = ifelse(team_is_home, game$away_score, game$home_score)
+        team_result = ifelse(team_is_home, home_result, 1 - home_result)
+        team_prob = ifelse(team_is_home, win_prob, 1 - win_prob)
+        
+        elo_change = ifelse(team_is_home, home_elo_adjustment, -home_elo_adjustment)
+        postgame_elo = pregame_elo + elo_change
+        game_num = nrow(team_results) + 1
+        
+        team_results = rbind(team_results, data.frame(
+            Game_Number = game_num,
+            opponent = opponent,
+            pregame_elo = round(pregame_elo, 2),
+            opponent_elo = round(opponent_elo, 2),
+            win_probability = round(team_prob, 4),
+            result = team_result,
+            team_score = team_score,
+            opponent_score = opp_score,
+            elo_adjustment = round(elo_change, 2),
+            postgame_elo = round(postgame_elo, 2)
+        ))
+    }
+}
+```
+
+## Elo Visualizations
+
+```{r}
+elo_graph_one_team = team_results %>%
+  ggplot(aes(x = Game_Number, y = postgame_elo)) +
+  geom_line(color = "darkred", linewidth = 1) +
+  geom_point(color = "red", size = 2) +
+  labs(
+    title = paste("Elo Rating Progression for the", gsub("_", " ", team_to_track), " (2002-2003)"),
+    x = "Game Number in Season",
+    y = "Elo Rating"
+  ) +
+  theme_minimal()
+
+print(elo_graph_one_team)
+
+comparison_df <- final_elos_df %>% 
+    select(team, Postseason_Elo = rating) %>%
+    left_join(initial_elos_df, by = "team") %>%
+    mutate(Elo_Change = Postseason_Elo - Preseason_Elo) %>%
+    arrange(desc(Postseason_Elo)) %>% 
+    filter(Elo_Change != 0.00000)
+
+comparison_plot <- comparison_df %>%
+    ggplot(aes(x = reorder(team, Postseason_Elo), y = Elo_Change)) +
+    geom_col(aes(fill = Elo_Change > 0), show.legend = FALSE) +
+    geom_hline(yintercept = 0, color = "black", linetype = "dashed") +
+    coord_flip() +
+    labs(
+        title = "Change in Elo Rating from Preseason to Postseason (2002-2003)",
+        x = "Team",
+        y = "Elo Change)",
+        subtitle = paste("Optimal K-factor (Weight):", round(optimal_weight, 2))
+    ) +
+    scale_fill_manual(values = c("TRUE" = "green4", "FALSE" = "firebrick")) +
+    theme_minimal()
+
+print(comparison_plot)
+print(comparison_df %>% 
+        arrange(team))
+```
+
+# Monte Carlo Simulation
+
+```{r}
+weight = 12 
+hfa = 39.34695
+divisions = list(
+    Atlantic = c("New_Jersey_Devils", "Philadelphia_Flyers", "New_York_Islanders", "New_York_Rangers", "Pittsburgh_Penguins"),
+    Northeast = c("Ottawa_Senators", "Toronto_Maple_Leafs", "Boston_Bruins", "Montreal_Canadiens", "Buffalo_Sabres"),
+    Southeast = c("Tampa_Bay_Lightning", "Washington_Capitals", "Florida_Panthers", "Carolina_Hurricanes", "Columbus_Blue_Jackets"),
+    Central = c("Detroit_Red_Wings", "St._Louis_Blues", "Chicago_Blackhawks", "Nashville_Predators", "Minnesota_Wild"),
+    Northwest = c("Colorado_Avalanche", "Vancouver_Canucks", "Edmonton_Oilers", "Calgary_Flames", "Winnipeg_Jets"),
+    Pacific = c("Dallas_Stars", "Anaheim_Ducks", "Los_Angeles_Kings", "Utah_Hockey_Club", "San_Jose_Sharks")
+)
+
+team_division_map = data.frame(
+  team = unlist(divisions),
+  division = rep(names(divisions), sapply(divisions, length))
+)
+team_info = team_info %>% 
+    select(team, rating) %>% 
+    left_join(team_division_map, by = "team")
+
+season_schedule = scores[first_game_index:last_game_index, ]
+
+set.seed(31)
+iterations = 1000
+results = data.frame(matrix(0, ncol = 6, nrow = nrow(team_info)))
+colnames(results) = c("team", "starting_elo", "ending_elo", "actual_wins", "average_wins", "division_titles")
+results$team = team_info$team
+results$starting_elo = team_info$rating
+simulated_win_totals = data.frame(matrix(0, ncol = nrow(team_info), nrow = iterations))
+colnames(simulated_win_totals) = team_info$team
+for(i in 1:iterations) {
+    if(i %% 1000 == 0) {print(i)}
+    season_stats = team_info %>% mutate(wins = 0, rand = runif(n()))
+    
+    for(j in 1:nrow(season_schedule)) {
+        game = season_schedule[j, ]
+        home_team = game$home_team
+        away_team = game$away_team
+        home_score = game$home_score
+        away_score = game$away_score
+        location = game$location
+        
+        home_index = match(home_team, season_stats$team)
+        away_index = match(away_team, season_stats$team)
+        home_elo = season_stats$rating[home_index]
+        away_elo = season_stats$rating[away_index]
+        home_win_prob = 1 / (1 + 10^((away_elo - (home_elo + hfa * location)) / 400))
+        u = runif(1)
+        if(u < home_win_prob) {
+            season_stats$wins[home_index] = season_stats$wins[home_index] + 1
+        } else {
+            season_stats$wins[away_index] = season_stats$wins[away_index] + 1
+        }
+        if(home_score > away_score) {
+            home_result = 1
+        } else if(home_score < away_score) {
+            home_result = 0
+        } else {
+            home_result = 0.5
+        }
+        score_diff = max(abs(home_score - away_score), 0.5)
+        home_elo_adjustment = weight * sqrt(score_diff) * (home_result - home_win_prob)
+        season_stats$rating[home_index] = home_elo + home_elo_adjustment
+        season_stats$rating[away_index] = away_elo - home_elo_adjustment
+        
+        if(i == 1) {
+            if(home_score > away_score) {
+                results$actual_wins[home_index] = results$actual_wins[home_index] + 1
+            } else if(home_score < away_score) {
+                results$actual_wins[away_index] = results$actual_wins[away_index] + 1
+            } else {
+                results$actual_wins[home_index] = results$actual_wins[home_index] + 0.5
+                results$actual_wins[away_index] = results$actual_wins[away_index] + 0.5
+            }
+        }
+    }
+    results$average_wins = results$average_wins + season_stats$wins
+    simulated_win_totals[i,] = t(season_stats$wins)
+    division_winners = data.frame(matrix(ncol = 6, nrow = 0))
+    colnames(division_winners) = colnames(season_stats)
+    for(div in names(divisions)) {
+        div_standings = season_stats[which(season_stats$division == div),]
+        div_standings = div_standings[order(-div_standings$wins, -div_standings$rand),]
+        division_winners = rbind(division_winners, div_standings[1,])
+    }
+    div_winner_indices = match(division_winners$team, results$team)
+    results$division_titles[div_winner_indices] = results$division_titles[div_winner_indices] + 1
+}
+results$ending_elo = season_stats$rating
+results$average_wins = results$average_wins/iterations
+results$division_titles = results$division_titles/iterations
+
+print(results %>% arrange(desc(average_wins)))
+```
+
+## Visualizaion
+
+```{r}
+
+team_to_plot = "Carolina_Hurricanes"
+devils_sim_wins = simulated_win_totals[[team_to_plot]]
+
+hist(devils_sim_wins,
+     main = paste("Simulated Win Totals for", gsub("_", " ", team_to_plot)),
+     xlab = "Simulated Wins",
+     ylab = "Frequency",
+     col = "coral",
+     border = "black")
+
+results %>% 
+  filter(average_wins != 0) %>% 
+  ggplot(aes(x = average_wins, y = actual_wins, label = team))+
+  geom_point(alpha = 0.6, size = 3) +
+  geom_abline(slope = 1, intercept = 0, col = "red") + 
+  geom_text(nudge_y = 1) +
+  labs(
+  title = "Simulated Wins vs. Actual Wins",
+  x = "Simulated Wins",
+  y = "Actual Wins"
+)
+cor(results$actual_wins, results$average_wins)
+results$residual <- results$actual_wins - results$average_wins
+```
+
