@@ -2,11 +2,14 @@
 My name is Olivia Snyder and I am a Quantitative Data Scientist specializing in ethical analysis and evidence-based strategy. My expertise is in data delivery, including robust data pipeline construction (Python/SQL) and Applied Sampling methodology, which I use to create dynamic, client-facing dashboards for statistical integrity. I have a proven ability to translate complex modeling and statistical learning into interpretable visualizations for both technical and non-technical stakeholders.
 
 # Portfolio
+## Current Projects:
+- [Humor Understanding](humor): I am conducting a Computational Linguistics research project at Pitt aimed at understanding how LLMs interpret and create humor. As part of a study reproduction, I developed a pipeline to benchmark various LLMs against human-authored text. Using Stanza (NLP) and the Infini-gram API, I quantified Adjective-Noun density and semantic novelty across datasets such as crowd sourced humor and the Bulwer-Lytton Fiction Contest. My results successfully reproduced human baselines while identifying that LLMs use significantly more AN pairs to create "flowery" humor.
+  
+## Academic Work:
 Highlight of some work I have completed over my four years at Pitt
 
 - [1501 Projects](projects): Here are two projects I worked on in my Data Structures and Algorithms 2 class; A Binary Search Tree and a Color Quantizer.
 - Capstone Project: My senior project required me to develop a data pipeline with five of my peers for a local Autonomous Vehicle company. For visualizations, we maintained an up-to-date dashboard through Looker Studio. Cannot include code due to privacy restrictions.
-- 
 - [Sports Analytics Project](https://github.com/olivias27/Portfolio/blob/main/STAT1341_MidtermPoster.pdf): For my midterm project, I was tasked with creating a research poster for a topic of my choosing. I used K-nearest neighbors clustering to categorize hockey team playing styles based on their defensive and offensive output. Linked is an attachment of the final poster.
 
 # Relevant Coursework
