@@ -1,9 +1,6 @@
-# Background
-My name is Olivia Snyder and I am a Quantitative Data Scientist specializing in ethical analysis and evidence-based strategy. My expertise is in data delivery, including robust data pipeline construction (Python/SQL) and Applied Sampling methodology, which I use to create dynamic, client-facing dashboards for statistical integrity. I have a proven ability to translate complex modeling and statistical learning into interpretable visualizations for both technical and non-technical stakeholders.
-
 # Portfolio
 ## Current Projects:
-- [Humor Understanding](Humor.py): I am conducting a Computational Linguistics research project at Pitt aimed at understanding how LLMs interpret and create humor. As part of a study reproduction, I developed a pipeline to benchmark various LLMs against human-authored text. Using Stanza (NLP) and the Infini-gram API, I quantified Adjective-Noun density and semantic novelty across datasets such as crowd sourced humor and the Bulwer-Lytton Fiction Contest. My results successfully reproduced human baselines while identifying that LLMs use significantly more AN pairs to create "flowery" humor.
+- Humor Understanding
   
 ## Academic Work:
 Highlight of some work I have completed over my four years at Pitt
