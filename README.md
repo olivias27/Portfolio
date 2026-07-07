@@ -1,5 +1,6 @@
 # Portfolio
 ## Current Projects:
+- Credit Default Prediction Analysis & Model
 - Humor Understanding
   
 ## Academic Work:
